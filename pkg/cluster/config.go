@@ -23,7 +23,8 @@ import (
 //+kubebuilder:rbac:groups=config.openshift.io;operator.openshift.io,resources=networks,verbs=get
 
 const (
-	ovnKubernetesNetwork = "OVNKubernetes"
+	ovnKubernetesNetwork    = "OVNKubernetes"
+	calicoKubernetesNetwork = "Calico"
 	// baseK8sVersion specifies the base k8s version supported by the operator. (For eg. All versions in the format
 	// 1.20.x are supported for baseK8sVersion 1.20)
 	baseK8sVersion = "v1.27"
@@ -180,6 +181,12 @@ type ovnKubernetes struct {
 	clusterNetworkConfig *clusterNetworkCfg
 }
 
+// calicoNetwork contains information specific to network type CalicoNetwork
+type calicoNetwork struct {
+	networkType
+	clusterNetworkConfig *clusterNetworkCfg
+}
+
 // networkConfigurationFactory is a factory method that returns information specific to network type
 func networkConfigurationFactory(oclient configclient.Interface, operatorClient operatorv1.OperatorV1Interface) (Network, error) {
 	network, err := getNetworkType(oclient)
@@ -206,6 +213,14 @@ func networkConfigurationFactory(oclient configclient.Interface, operatorClient 
 	switch network {
 	case ovnKubernetesNetwork:
 		return &ovnKubernetes{
+			networkType{
+				name:           network,
+				operatorClient: operatorClient,
+			},
+			clusterNetworkCfg,
+		}, nil
+	case calicoKubernetesNetwork:
+		return &calicoNetwork{
 			networkType{
 				name:           network,
 				operatorClient: operatorClient,
@@ -255,6 +270,21 @@ func (ovn *ovnKubernetes) Validate() error {
 	if len(networkCR.Spec.DefaultNetwork.OVNKubernetesConfig.HybridOverlayConfig.HybridClusterNetwork) == 0 {
 		return fmt.Errorf("invalid OVN hybrid networking configuration")
 	}
+	return nil
+}
+
+// GetServiceCIDR returns the serviceCIDR string
+func (calico *calicoNetwork) GetServiceCIDR() string {
+	return calico.clusterNetworkConfig.serviceCIDR
+}
+
+// GetVXLANPort gets the VXLAN port to be used for VXLAN tunnel establishment
+func (calico *calicoNetwork) VXLANPort() string {
+	return calico.clusterNetworkConfig.vxlanPort
+}
+
+// Validate for Calico network.
+func (calico *calicoNetwork) Validate() error {
 	return nil
 }
 
